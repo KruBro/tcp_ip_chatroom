@@ -87,7 +87,7 @@ int main()
         int client_port = ntohs(clientinfo.sin_port);
         printf("[INFO] : Server Accepted a Connection\n");
         printf("[INFO] : Client IP -> %s\n", client_ip);
-        printf("[INFO] : Client Port ->%d", client_port);
+        printf("[INFO] : Client Port ->%d\n", client_port);
 
         pid_t pid = fork();
         if(pid < 0)
