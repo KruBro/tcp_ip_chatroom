@@ -1,4 +1,6 @@
+#ifndef _XOPEN_SOURCE 
 #define _XOPEN_SOURCE 700 
+#endif
 #include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -9,8 +11,10 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include "common/netutils.h"
+#include "common/protocol.h"
+#include "server/server_auth.h"
 
-#define TEST_MSG_LEN 20
+#define DB_PATH "server_dev.db"
 
 void signal_handler(int signum)
 {
@@ -97,31 +101,18 @@ int main()
         }
         else if(pid == 0)
         {
-            //Child_process
-            //check the data that has client sent over through the send
-            // login logout
-            //all happens here
-            char buff[TEST_MSG_LEN];
-            ssize_t client_data = readn(client_socket, TEST_MSG_LEN, buff);
-            if(client_data == 0)
+            printf("Child with PID -> %d\n", getpid());
+            printf("Parent of the child -> %d\n", getppid());
+            SignInType request;
+            Reply status;
+            int read_ret = readn(client_socket, REQUEST_WIRE_SIZE, (char*)&request);
+            if(read_ret != REQUEST_WIRE_SIZE)
             {
-                printf("[INFO] : Client Disconnected\n");
+                close(sockfd);
+                _exit(0);
             }
-            else if(client_data < 0)
-            {
-                printf("[ERROR] : UNKNOWn\n");
-            }
-            else
-            {
-                printf("[SUCCESS] : Read Completed\n");
-            }
-
-            if(writen(client_socket, TEST_MSG_LEN, buff) == TEST_MSG_LEN)
-            {
-                printf("[EQUALS]\n");
-            }
-            else
-                printf("[NOTEQUAL]\n");
+            status = handle_auth_request(&request, DB_PATH, client_socket);
+            writen(client_socket, REPLY_WIRE_SIZE, (char*)&status);
             
             close(sockfd);
             _exit(0);
