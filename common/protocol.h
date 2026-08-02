@@ -6,6 +6,7 @@
 #endif
 
 #include <assert.h>
+#include <sys/types.h> 
 
 #define USERNAME_LEN    32
 #define PASSWORD_LEN    32
@@ -13,7 +14,7 @@
 #define REQUEST_WIRE_SIZE   (USERNAME_LEN + PASSWORD_LEN + sizeof(int))
 #define MSG_WIRE_SIZE       (MESSAGE_LEN + USERNAME_LEN + USERNAME_LEN + sizeof(int))
 #define REPLY_WIRE_SIZE     (sizeof(int))
-
+#define IPC_WIRE_SIZE       (sizeof(int) + sizeof(pid_t) + MSG_WIRE_SIZE + USERNAME_LEN)
 
 typedef enum{
     AUTH_REGISTER = 1,
@@ -39,6 +40,15 @@ typedef enum{
     REPLY_CONNECTION_FAILED
 }ReplyCode;
 
+typedef enum {
+    IPC_LOGIN_NOTIFY,
+    IPC_CHAT_RELAY
+} IpcMsgType;
+
+
+
+
+
 typedef struct{
     char userName[USERNAME_LEN];
     char userPass[PASSWORD_LEN];
@@ -62,4 +72,15 @@ typedef struct Reply{
 }Reply;
 
 static_assert(sizeof(Reply) == REPLY_WIRE_SIZE, "Reply size does not match REPLY_WIRE_SIZE - Check for struct padding");
+
+typedef struct {
+    IpcMsgType type;
+    pid_t pid;
+    Msg chat;              // only meaningful when type == IPC_CHAT_RELAY
+    char username[USERNAME_LEN];  // only meaningful when type == IPC_LOGIN_NOTIFY
+} IpcUplinkMsg;
+
+static_assert(sizeof(IpcUplinkMsg) == IPC_WIRE_SIZE, "IpcUplinkMsg size does not match IPC_WIRE_SIZE - check for struct padding");
+
+
 #endif

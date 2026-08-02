@@ -13,6 +13,7 @@
 #include "common/netutils.h"
 #include "common/protocol.h"
 #include "server/server_auth.h"
+#include "server/server_ipc.h"
 
 #define DB_PATH "server_dev.db"
 
@@ -22,6 +23,7 @@ void signal_handler(int signum)
     pid_t pid;
     while((pid = waitpid(-1, &wstatus, WNOHANG)) > 0)
     {
+        remove_client(pid);
         if (pid > 0 && WIFEXITED(wstatus))
         {
             printf("child terminated with exit code %d.\n", WEXITSTATUS(wstatus));
@@ -75,6 +77,13 @@ int main()
     }
     printf("[INFO] : Server is listening\n");
 
+    int uplink_fd[2];
+    if(pipe(uplink_fd) < 0)
+    {
+        perror("pipe");
+        return 1;
+    }
+
     while(1)
     {
         struct sockaddr_in clientinfo;
@@ -93,6 +102,14 @@ int main()
         printf("[INFO] : Client IP -> %s\n", client_ip);
         printf("[INFO] : Client Port ->%d\n", client_port);
 
+        int downlink_fd[2];
+        if(pipe(downlink_fd) < 0)
+        {
+            perror("pipe");
+            close(client_socket);
+            continue;
+        }
+
         pid_t pid = fork();
         if(pid < 0)
         {
@@ -101,6 +118,9 @@ int main()
         }
         else if(pid == 0)
         {
+            close(sockfd);
+            close(uplink_fd[0]);
+            close(downlink_fd[1]);
             printf("Child with PID -> %d\n", getpid());
             printf("Parent of the child -> %d\n", getppid());
             SignInType request;
@@ -114,12 +134,14 @@ int main()
             status = handle_auth_request(&request, DB_PATH, client_socket);
             writen(client_socket, REPLY_WIRE_SIZE, (char*)&status);
             
-            close(sockfd);
             _exit(0);
         }
         else if(pid > 0)
         {
             close(client_socket);
+            close(downlink_fd[0]);
+
+            add_client(pid, downlink_fd[1]);
         }
     }
 
