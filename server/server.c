@@ -10,10 +10,12 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 #include "common/netutils.h"
 #include "common/protocol.h"
 #include "server/server_auth.h"
 #include "server/server_ipc.h"
+#include "server_chat.h"
 
 #define DB_PATH "server_dev.db"
 
@@ -86,63 +88,137 @@ int main()
 
     while(1)
     {
-        struct sockaddr_in clientinfo;
-        socklen_t client_len = sizeof(clientinfo);
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sockfd, &readfds);
+        FD_SET(uplink_fd[0], &readfds);
 
-        int client_socket = accept(sockfd, (struct sockaddr *)&clientinfo, &client_len);
-        if(client_socket < 0)
+        int maxfd = (sockfd > uplink_fd[0]) ? sockfd : uplink_fd[0];
+
+        int ready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+        if(ready < 0)
         {
-            perror("accept");
-            continue;
-        }
-
-        char *client_ip = inet_ntoa(clientinfo.sin_addr);
-        int client_port = ntohs(clientinfo.sin_port);
-        printf("[INFO] : Server Accepted a Connection\n");
-        printf("[INFO] : Client IP -> %s\n", client_ip);
-        printf("[INFO] : Client Port ->%d\n", client_port);
-
-        int downlink_fd[2];
-        if(pipe(downlink_fd) < 0)
-        {
-            perror("pipe");
-            close(client_socket);
-            continue;
-        }
-
-        pid_t pid = fork();
-        if(pid < 0)
-        {
-            perror("fork");
+            if(errno == EINTR)
+                continue;
+            perror("select");
             break;
         }
-        else if(pid == 0)
+
+        if(FD_ISSET(sockfd, &readfds))
         {
-            close(sockfd);
-            close(uplink_fd[0]);
-            close(downlink_fd[1]);
-            printf("Child with PID -> %d\n", getpid());
-            printf("Parent of the child -> %d\n", getppid());
-            SignInType request;
-            Reply status;
-            int read_ret = readn(client_socket, REQUEST_WIRE_SIZE, (char*)&request);
-            if(read_ret != REQUEST_WIRE_SIZE)
+            // existing accept() + fork() logic goes here, unchanged in its internals —
+            // just now it's conditional on this check, instead of accept() blocking directly
+            struct sockaddr_in clientinfo;
+            socklen_t client_len = sizeof(clientinfo);
+
+            int client_socket = accept(sockfd, (struct sockaddr *)&clientinfo, &client_len);
+            if(client_socket < 0)
+            {
+                perror("accept");
+                continue;
+            }
+
+            char *client_ip = inet_ntoa(clientinfo.sin_addr);
+            int client_port = ntohs(clientinfo.sin_port);
+            printf("[INFO] : Server Accepted a Connection\n");
+            printf("[INFO] : Client IP -> %s\n", client_ip);
+            printf("[INFO] : Client Port ->%d\n", client_port);
+
+            int downlink_fd[2];
+            if(pipe(downlink_fd) < 0)
+            {
+                perror("pipe");
+                close(client_socket);
+                continue;
+            }
+
+            pid_t pid = fork();
+            if(pid < 0)
+            {
+                perror("fork");
+                break;
+            }
+            else if(pid == 0)
             {
                 close(sockfd);
+                close(uplink_fd[0]);
+                close(downlink_fd[1]);
+                printf("Child with PID -> %d\n", getpid());
+                printf("Parent of the child -> %d\n", getppid());
+
+                SignInType request;
+                Reply status;
+                int read_ret = readn(client_socket, REQUEST_WIRE_SIZE, (char*)&request);
+                if(read_ret != REQUEST_WIRE_SIZE)
+                {
+                    close(sockfd);
+                    close(client_socket);
+                    close(uplink_fd[1]);
+                    close(downlink_fd[0]);
+                    _exit(0);
+                }
+                status = handle_auth_request(&request, DB_PATH, client_socket);
+                writen(client_socket, REPLY_WIRE_SIZE, (char*)&status);
+
+
+                IpcUplinkMsg msg;
+                if(status.reply == REPLY_LOGIN_SUCCESS)
+                {
+                    msg.type = IPC_LOGIN_NOTIFY;
+                    msg.pid = getpid();
+                    strcpy(msg.username, request.userName);
+                    writen(uplink_fd[1], IPC_WIRE_SIZE, (char *)&msg);
+                    run_chat_session(client_socket, downlink_fd[0], uplink_fd[1], msg.username, DB_PATH);
+                }
+                
                 _exit(0);
             }
-            status = handle_auth_request(&request, DB_PATH, client_socket);
-            writen(client_socket, REPLY_WIRE_SIZE, (char*)&status);
-            
-            _exit(0);
-        }
-        else if(pid > 0)
-        {
-            close(client_socket);
-            close(downlink_fd[0]);
+            else if(pid > 0)
+            {
+                close(client_socket);
+                close(downlink_fd[0]);
 
-            add_client(pid, downlink_fd[1]);
+                add_client(pid, downlink_fd[1]);
+            }
         }
+
+        if(FD_ISSET(uplink_fd[0], &readfds))
+        {
+            IpcUplinkMsg msg;
+            if(readn(uplink_fd[0], IPC_WIRE_SIZE, (char*)&msg) == IPC_WIRE_SIZE)
+            {
+                if(msg.type == IPC_LOGIN_NOTIFY)
+                {
+                    mark_client_logged_in(msg.pid, msg.username);
+                }
+                else if(msg.type == IPC_CHAT_RELAY)
+                {
+                    if(msg.chat.chatOption == CHAT_SINGLE)
+                    {
+                        int target_fd;
+                        if(find_downlink_fd(msg.chat.recieverName, &target_fd) == 0)
+                            printf("[WARN] : target user not found for relay\n");
+                        else
+                            writen(target_fd, MSG_WIRE_SIZE, (char *)&msg.chat);
+                    }
+                    else if(msg.chat.chatOption == CHAT_GROUP)
+                    {
+                        int fds[MAX_CLIENTS];
+
+                        int count = get_online_downlink_fds(msg.pid, fds, MAX_CLIENTS);
+
+                        for(int i = 0; i < count; i++)
+                        {
+                            if(writen(fds[i], MSG_WIRE_SIZE, (char*)&msg.chat) != MSG_WIRE_SIZE)
+                            {
+                                printf("[ERROR] : Relay Failed for fd[%d]\n", i);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
     }
 
     close(sockfd);

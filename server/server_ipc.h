@@ -16,5 +16,6 @@ int add_client(pid_t pid, int downlink_write_fd);
 void mark_client_logged_in(pid_t pid, const char *username);
 int find_downlink_fd(const char *username, int *out_fd);
 void remove_client(pid_t pid);
+int get_online_downlink_fds(pid_t exclude_pid, int *out_fds, int max_count);
 
 #endif

@@ -45,10 +45,6 @@ typedef enum {
     IPC_CHAT_RELAY
 } IpcMsgType;
 
-
-
-
-
 typedef struct{
     char userName[USERNAME_LEN];
     char userPass[PASSWORD_LEN];

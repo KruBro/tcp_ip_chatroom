@@ -22,7 +22,6 @@ int add_client(pid_t pid, int downlink_write_fd)
             return 1;
         }
     }
-
     return 0;
 }
 
@@ -56,7 +55,6 @@ void mark_client_logged_in(pid_t pid, const char *username)
             return;
         }
     }
-
     printf("[INFO] : NOT Found\n");
 }
 
@@ -70,6 +68,22 @@ int find_downlink_fd(const char *username, int *out_fd)
             return 1;
         }
     }
-
     return 0;
+}
+
+int get_online_downlink_fds(pid_t exclude_pid, int *out_fds, int max_count)
+{
+    int found = 0;
+    for(int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(found >= max_count)
+            break;
+        
+        if(clients[i].logged_in == 1 && clients[i].pid != exclude_pid)
+        {
+            out_fds[found] = clients[i].downlink_write_fd;
+            found++;
+        }
+    }
+    return found;
 }
