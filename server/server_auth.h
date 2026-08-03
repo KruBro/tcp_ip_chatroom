@@ -7,6 +7,7 @@
 #include "server/server_db.h"
 #include "common/protocol.h"
 #include "common/netutils.h"
+#include "common/validation.h"
 
 Reply handle_auth_request(SignInType *request, char *db_path, int client_socket);
 

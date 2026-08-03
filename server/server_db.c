@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/file.h>
-#include "server_db.h"
+#include "server/server_db.h"
 
 DbResult db_register(char *userName, char *password, char *path)
 {
@@ -91,7 +91,7 @@ DbResult db_login(char *userName, char *password, char *path)
     return DB_NOT_FOUND;
 }
 
-void db_set_user_status(char *userName, char *path, const char *status, int sockfd)
+void db_set_user_status(const char *userName, char *path, const char *status, int sockfd)
 {
     FILE *fp_org = fopen(path, "r");
     if(fp_org == NULL)
@@ -209,4 +209,41 @@ DbResult db_lookup_sockfd(char *userName, char *path, int *outSockFd)
 
     fclose(fp);
     return DB_NOT_FOUND;
+}
+
+void db_get_online_users(char *path, char *out_buffer) {
+    out_buffer[0] = '\0';
+    FILE *fp = fopen(path, "r");
+    if(fp == NULL) {
+        strcpy(out_buffer, "Error reading DB");
+        return;
+    }
+    
+    flock(fileno(fp), LOCK_SH);
+    char buffer[256];
+    int count = 0;
+    char temp[MESSAGE_LEN] = "Online Users: ";
+    
+    while(fgets(buffer, sizeof(buffer), fp) != NULL) {
+        buffer[strcspn(buffer, "\n")] = '\0';
+        if(strlen(buffer) == 0) continue;
+        
+        char *kv_save = NULL;
+        char *username = strtok_r(buffer, ":", &kv_save);
+        if(username != NULL) {
+            strtok_r(NULL, ":", &kv_save); // Skip the password field
+            char *status = strtok_r(NULL, ":", &kv_save);
+            
+            if(status != NULL && strcmp(status, "ONLINE") == 0) {
+                if(count > 0) strcat(temp, ", ");
+                strcat(temp, username);
+                count++;
+            }
+        }
+    }
+    flock(fileno(fp), LOCK_UN);
+    fclose(fp);
+    
+    if(count == 0) strcpy(out_buffer, "No users online.");
+    else strcpy(out_buffer, temp);
 }

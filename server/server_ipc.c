@@ -1,24 +1,25 @@
 #include "server_ipc.h"
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 
 static ClientEntry clients[MAX_CLIENTS];
 static int client_count = 0;
 
 int add_client(pid_t pid, int downlink_write_fd)
 {
-    // find the next free slot (question: scan for an empty slot with pid == 0,
-    // or just append at client_count and increment, assuming no removal-reuse yet?)
-    // fill in pid, downlink_write_fd
-    // username[0] = '\0', logged_in = 0
     for(int i = 0; i < MAX_CLIENTS; i++)
     {
+        if(client_count >= MAX_CLIENTS)
+            break;
+        
         if(clients[i].pid == 0)
         {
             clients[i].pid = pid;
             clients[i].downlink_write_fd = downlink_write_fd;
             clients[i].username[0] = '\0';
             clients[i].logged_in = 0;
+            client_count++;
             return 1;
         }
     }
@@ -27,13 +28,11 @@ int add_client(pid_t pid, int downlink_write_fd)
 
 void remove_client(pid_t pid)
 {
-    // scan the array for the entry matching this pid
-    // once found, decide: clear its fields to a sentinel "empty" state
-    // (pid = 0, downlink_write_fd = -1, username[0] = '\0', logged_in = 0)?
     for(int i = 0; i < MAX_CLIENTS; i++)
-    {
+    {   
         if(clients[i].pid == pid)
         {
+            client_count--;
             close(clients[i].downlink_write_fd);
             clients[i].pid = 0;
             clients[i].downlink_write_fd = -1;

@@ -36,6 +36,15 @@ void run_chat_session(int client_socket, int downlink_read_fd, int uplink_write_
                         printf("[ERROR] : Relay failed\n");
                     }
                 }
+                else if(msg.chat.chatOption == CHAT_LIST_USERS)
+                {
+                    Msg reply_msg;
+                    memset(&reply_msg, 0, sizeof(Msg));
+                    reply_msg.chatOption = CHAT_LIST_USERS;
+                    strcpy(reply_msg.senderName, "SERVER");
+                    db_get_online_users(db_path, reply_msg.message);
+                    writen(client_socket, MSG_WIRE_SIZE, (char*)&reply_msg);
+                }
                 else if(msg.chat.chatOption == CHAT_LOGOUT) 
                 {
                     db_set_user_status(username, db_path, "OFFLINE", -1);

@@ -1,19 +1,5 @@
 #include "server_auth.h"
 
-int is_valid_field(const char *field, int max_len)
-{
-    size_t len = strlen(field);
-    if (len == 0 || len >= (size_t)max_len)
-        return 0;
-
-    for (int i = 0; field[i] != '\0'; i++)
-    {
-        unsigned char c = (unsigned char)field[i];
-        if (!isalnum(c) && c != '_')
-            return 0;
-    }
-    return 1;
-}
 
 Reply handle_auth_request(SignInType *request, char *db_path, int client_socket)
 {
@@ -49,7 +35,7 @@ Reply handle_auth_request(SignInType *request, char *db_path, int client_socket)
         }
         else
         {
-            status.reply == REPLY_CONNECTION_FAILED;
+            status.reply = REPLY_CONNECTION_FAILED;
             return status;
         }
     }

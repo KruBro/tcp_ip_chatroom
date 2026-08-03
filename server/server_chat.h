@@ -5,6 +5,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "common/protocol.h"
 #include "common/netutils.h"

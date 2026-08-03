@@ -24,6 +24,7 @@ typedef enum{
 typedef enum{
     CHAT_SINGLE = 1,
     CHAT_GROUP,
+    CHAT_LIST_USERS,
     CHAT_LOGOUT
 }ChatType;
 

@@ -13,11 +13,13 @@
 #include <sys/select.h>
 #include "common/netutils.h"
 #include "common/protocol.h"
+#include "common/constants.h"
 #include "server/server_auth.h"
 #include "server/server_ipc.h"
 #include "server_chat.h"
 
-#define DB_PATH "server_dev.db"
+
+#define DB_PATH "db/users.db"
 
 void signal_handler(int signum)
 {
@@ -61,8 +63,8 @@ int main()
     //2. Bind The Ip address and port number
     struct sockaddr_in serverinfo;
     serverinfo.sin_family = AF_INET;
-    serverinfo.sin_port = htons(6333);
-    serverinfo.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverinfo.sin_port = htons(PORT);
+    serverinfo.sin_addr.s_addr = inet_addr(SERVER_IP);
 
     if((bind(sockfd, (const struct sockaddr *)&serverinfo, sizeof(serverinfo))) < 0)
     {

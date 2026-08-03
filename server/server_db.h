@@ -5,6 +5,9 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "common/constants.h"
+#include "common/protocol.h"
+
 typedef enum{
     DB_OK,
     DB_DUPLICATE,
@@ -16,7 +19,8 @@ typedef enum{
 
 DbResult db_register(char *userName, char *password, char *path);
 DbResult db_login(char *userName, char *password, char *path);
-void db_set_user_status(char *userName, char *path, const char *status, int sockfd);
+void db_set_user_status(const char *userName, char *path, const char *status, int sockfd);
 DbResult db_lookup_sockfd(char *userName, char *path, int *outSockFd);
+void db_get_online_users(char *path, char *out_buffer);
 
 #endif
